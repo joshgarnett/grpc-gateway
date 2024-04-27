@@ -493,3 +493,85 @@ func TestOutgoingTrailerMatcher(t *testing.T) {
 		})
 	}
 }
+
+func TestOutgoingEtagIfNoneMatch(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		msg            *pb.SimpleMessage
+		requestHeaders http.Header
+		method         string
+		name           string
+		headers        http.Header
+		expectedStatus int
+	}{
+		{
+			msg:    &pb.SimpleMessage{Id: "foo"},
+			method: http.MethodGet,
+			name:   "small message",
+			headers: http.Header{
+				"Content-Length": []string{"12"},
+				"Content-Type":   []string{"application/json"},
+			},
+			expectedStatus: http.StatusOK,
+		},
+		{
+			msg:    &pb.SimpleMessage{Id: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aliquam rhoncus magna ante, sed malesuada nibh vehicula in nec."},
+			method: http.MethodGet,
+			name:   "large message",
+			headers: http.Header{
+				"Content-Length": []string{"129"},
+				"Content-Type":   []string{"application/json"},
+				"Etag":           []string{"\"41bf5d28a47f59b2a649e44f2607b0ea\""},
+			},
+			expectedStatus: http.StatusOK,
+		},
+		{
+			msg:    &pb.SimpleMessage{Id: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aliquam rhoncus magna ante, sed malesuada nibh vehicula in nec."},
+			method: http.MethodGet,
+			requestHeaders: http.Header{
+				"If-None-Match": []string{"41bf5d28a47f59b2a649e44f2607b0ea"},
+			},
+			name: "large message with If-None-Match header",
+			headers: http.Header{
+				"Content-Length": []string{"129"},
+				"Content-Type":   []string{"application/json"},
+				"Etag":           []string{"\"41bf5d28a47f59b2a649e44f2607b0ea\""},
+			},
+			expectedStatus: http.StatusNotModified,
+		},
+		{
+			msg:    &pb.SimpleMessage{Id: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aliquam rhoncus magna ante, sed malesuada nibh vehicula in nec."},
+			method: http.MethodPost,
+			requestHeaders: http.Header{
+				"If-None-Match": []string{"41bf5d28a47f59b2a649e44f2607b0ea"},
+			},
+			name: "large message with If-None-Match header",
+			headers: http.Header{
+				"Content-Length": []string{"129"},
+				"Content-Type":   []string{"application/json"},
+			},
+			expectedStatus: http.StatusOK,
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			req := httptest.NewRequest(tc.method, "http://example.com/foo", nil)
+			req.Header = tc.requestHeaders
+			resp := httptest.NewRecorder()
+
+			runtime.ForwardResponseMessage(context.Background(), runtime.NewServeMux(runtime.WithEnableEtagSupport()), &runtime.JSONPb{}, resp, req, tc.msg)
+
+			w := resp.Result()
+			defer w.Body.Close()
+			if w.StatusCode != tc.expectedStatus {
+				t.Fatalf("StatusCode %d want %d", w.StatusCode, http.StatusOK)
+			}
+
+			if !reflect.DeepEqual(w.Header, tc.headers) {
+				t.Fatalf("Header %v want %v", w.Header, tc.headers)
+			}
+		})
+	}
+}

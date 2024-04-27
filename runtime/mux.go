@@ -63,6 +63,7 @@ type ServeMux struct {
 	streamErrorHandler        StreamErrorHandlerFunc
 	routingErrorHandler       RoutingErrorHandlerFunc
 	disablePathLengthFallback bool
+	enableEtagSupport         bool
 	unescapingMode            UnescapingMode
 }
 
@@ -221,6 +222,13 @@ func WithRoutingErrorHandler(fn RoutingErrorHandlerFunc) ServeMuxOption {
 func WithDisablePathLengthFallback() ServeMuxOption {
 	return func(serveMux *ServeMux) {
 		serveMux.disablePathLengthFallback = true
+	}
+}
+
+// WithEnableEtagSupport returns a ServeMuxOption that enables writing Etags and handling If-None-Match request headers
+func WithEnableEtagSupport() ServeMuxOption {
+	return func(serveMux *ServeMux) {
+		serveMux.enableEtagSupport = true
 	}
 }
 
